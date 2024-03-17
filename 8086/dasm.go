@@ -70,33 +70,33 @@ func Dasm(data []byte) ([]byte, error) {
 				if err != nil {
 					return nil, err
 				}
-				dest, source = eac, regS
-				if d {
-					dest, source = regS, eac
-				}
+
+				dest, source = fmt.Sprintf("[%s]", eac), regS
 				i += 2
 			case ModTypeMemory8BitDisplacement:
-				eacFmt, err := memMode8BitDisplacmentLookup(rm)
+				eac, err := memMode8BitDisplacmentLookup(rm)
 				if err != nil {
 					return nil, err
 				}
-				// TODO: Change the memMode8BitDisplacmentLookup function to return just the register & have addition templating be the responsibility of this function so that the 0 case is handled properly
-				eac := fmt.Sprintf(eacFmt, int8(data[i+2]))
-				dest, source = eac, regS
-				if d {
-					dest, source = regS, eac
+
+				displacement := int8(data[i+2])
+				if displacement == 0 {
+					dest, source = fmt.Sprintf("[%s]", eac), regS
+				} else {
+					dest, source = fmt.Sprintf("[%s + %d]", eac, displacement), regS
 				}
 				i += 3
 
 			case ModTypeMemory16BitDisplacement:
-				eacFmt, err := memMode16BitDisplacmentLookup(rm)
+				eac, err := memMode16BitDisplacmentLookup(rm)
 				if err != nil {
 					return nil, err
 				}
-				eac := fmt.Sprintf(eacFmt, int16(data[i+3])<<8|int16(data[i+2]))
-				dest, source = eac, regS
-				if d {
-					dest, source = regS, eac
+				displacement := int16(data[i+3])<<8 | int16(data[i+2])
+				if displacement == 0 {
+					dest, source = fmt.Sprintf("[%s]", eac), regS
+				} else {
+					dest, source = fmt.Sprintf("[%s + %d]", eac, displacement), regS
 				}
 				i += 4
 			case ModTypeRegToReg:
@@ -105,12 +105,12 @@ func Dasm(data []byte) ([]byte, error) {
 					return nil, err
 				}
 				dest, source = rmS, regS
-				if d {
-					dest, source = regS, rmS
-				}
 				i += 2
 			default:
 				return nil, errors.New("mod field had unexpected value")
+			}
+			if d {
+				dest, source = source, dest
 			}
 			res += fmt.Sprintf("mov %s, %s\n", dest, source)
 		}

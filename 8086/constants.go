@@ -1,6 +1,5 @@
 package inst
 
-var movMask = byte(0b11111100)
 var mov = byte(0b10001000)
 var dMask = byte(0b00000010)
 var wMask = byte(0b0000001)
@@ -8,39 +7,39 @@ var regMoveMask = byte(0b11000000)
 
 // MOD: 00
 var memModeNoDisplacmentMap = map[byte]string{
-	byte(0b000): "[bx + si]",
-	byte(0b001): "[bx + di]",
-	byte(0b010): "[bp + si]",
-	byte(0b011): "[bp + di]",
-	byte(0b100): "[si]",
-	byte(0b101): "[di]",
+	byte(0b000): "bx + si",
+	byte(0b001): "bx + di",
+	byte(0b010): "bp + si",
+	byte(0b011): "bp + di",
+	byte(0b100): "si",
+	byte(0b101): "di",
 	// DIRECT ADDRESS
 	// byte(0b110): ,
-	byte(0b111): "[bx]",
+	byte(0b111): "bx",
 }
 
 // MOD: 01
 var memMode8BitDisplacmentMap = map[byte]string{
-	byte(0b000): "[bx + si + %d]",
-	byte(0b001): "[bx + di + %d]",
-	byte(0b010): "[bp + si + %d]",
-	byte(0b011): "[bp + di + %d]",
-	byte(0b100): "[si + %d]",
-	byte(0b101): "[di + %d]",
-	byte(0b110): "[bp + %d]",
-	byte(0b111): "[bx + %d]",
+	byte(0b000): "bx + si",
+	byte(0b001): "bx + di",
+	byte(0b010): "bp + si",
+	byte(0b011): "bp + di",
+	byte(0b100): "si",
+	byte(0b101): "di",
+	byte(0b110): "bp",
+	byte(0b111): "bx",
 }
 
 // MOD: 10
 var memMode16BitDisplacmentMap = map[byte]string{
-	byte(0b000): "[bx + si + %d]",
-	byte(0b001): "[bx + di + %d]",
-	byte(0b010): "[bp + si + %d]",
-	byte(0b011): "[bp + di + %d]",
-	byte(0b100): "[si + %d]",
-	byte(0b101): "[di + %d]",
-	byte(0b110): "[bp + %d]",
-	byte(0b111): "[bx + %d]",
+	byte(0b000): "bx + si",
+	byte(0b001): "bx + di",
+	byte(0b010): "bp + si",
+	byte(0b011): "bp + di",
+	byte(0b100): "si",
+	byte(0b101): "di",
+	byte(0b110): "bp",
+	byte(0b111): "bx",
 }
 
 // MOD: 11
