@@ -4,6 +4,8 @@ import (
 	"flag"
 	"log"
 	"os"
+
+	"github.com/nicksanford/inst"
 )
 
 func main() {
@@ -18,7 +20,9 @@ func main() {
 	}
 
 	if len(flag.Args()) != 1 {
-		l.Fatalf("usage: %s <file>\n", os.Args[0])
+		l.Printf("usage: %s <file>\n", os.Args[0])
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
 
 	data, err := os.ReadFile(flag.Arg(0))
@@ -27,12 +31,12 @@ func main() {
 	}
 
 	if *assemble {
-		data, err = asm(data)
+		data, err = inst.Asm(data)
 		if err != nil {
 			l.Fatal(err.Error())
 		}
 	} else {
-		data, err = dasm(data)
+		data, err = inst.Dasm(data)
 		if err != nil {
 			l.Fatal(err.Error())
 		}

@@ -1,11 +1,11 @@
-package main
+package inst
 
 import (
 	"errors"
 	"strings"
 )
 
-func asm(data []byte) ([]byte, error) {
+func Asm(data []byte) ([]byte, error) {
 	rawS := string(data)
 	if !strings.Contains(rawS, "bits 16") {
 		return nil, errors.New("only 16 bit 8086 instructions")
