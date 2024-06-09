@@ -102,15 +102,22 @@ const (
 	ModTypeRegToReg
 )
 
-type MovType uint8
+type OpType uint8
 
 const (
-	MovTypeInvalid = iota
-	MovTypeRegMemToFromReg
-	MovTypeImmToRegOrMem
-	MovTypeImmToReg
-	MovTypeMemToAcc
-	MovTypeAccToMem
-	MovTypeRegOrMemToSegReg
-	MovTypeSegRegToRegMemory
+	OpTypeInvalid = iota
+	OpTypeMovRegMemToFromReg
+	OpTypeMovImmToRegOrMem
+	OpTypeMovImmToReg
+	OpTypeMovMemToAcc
+	OpTypeMovAccToMem
+	OpTypeMovRegOrMemToSegReg
+	OpTypeMovSegRegToRegMemory
+	OpTypeAddRegMemWithReg
+	OpTypeImmToRegOrMem
+	OpTypeAddImmToAcc
+	OpTypeSubRegMemWithReg
+	OpTypeSubImmToAcc
+	OpTypeCmpRegMemWithReg
+	OpTypeCmpImmToAcc
 )

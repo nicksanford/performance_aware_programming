@@ -83,30 +83,58 @@ func modType(b byte) ModType {
 	}
 }
 
-func movType(b byte) MovType {
+func opType(b byte) OpType {
 	if b&0b11110000 == 0b10110000 {
-		return MovTypeImmToReg
+		return OpTypeMovImmToReg
 	}
 
 	if b&0b11111100 == 0b10001000 {
-		return MovTypeRegMemToFromReg
+		return OpTypeMovRegMemToFromReg
 	}
 
 	switch b & 0b11111110 {
 	case 0b11000110:
-		return MovTypeImmToRegOrMem
+		return OpTypeMovImmToRegOrMem
 	case 0b10100000:
-		return MovTypeMemToAcc
+		return OpTypeMovMemToAcc
 	case 0b10100010:
-		return MovTypeAccToMem
+		return OpTypeMovAccToMem
 	}
 
 	switch b {
 	case 0b10001110:
-		return MovTypeRegOrMemToSegReg
+		return OpTypeMovRegOrMemToSegReg
 	case 0b10001100:
-		return MovTypeSegRegToRegMemory
+		return OpTypeMovSegRegToRegMemory
 	}
 
-	return MovTypeInvalid
+	if b&0b11111100 == 0 {
+		return OpTypeAddRegMemWithReg
+	}
+
+	if b&0b11111100 == 0b10000000 {
+		return OpTypeImmToRegOrMem
+	}
+
+	if b&0b11111110 == 0b00000100 {
+		return OpTypeAddImmToAcc
+	}
+
+	if b&0b11111100 == 0b00101000 {
+		return OpTypeSubRegMemWithReg
+	}
+
+	if b&0b11111110 == 0b00101100 {
+		return OpTypeSubImmToAcc
+	}
+
+	if b&0b11111100 == 0b00111000 {
+		return OpTypeCmpRegMemWithReg
+	}
+
+	if b&0b11111110 == 0b00111100 {
+		return OpTypeCmpImmToAcc
+	}
+
+	return OpTypeInvalid
 }
