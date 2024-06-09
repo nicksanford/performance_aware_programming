@@ -1,4 +1,4 @@
-.PHONY: build
+.PHONY: build clan test watch
 
 DATA_URL := https://raw.githubusercontent.com/cmuratori/computer_enhance/main/perfaware/part1
 
@@ -10,6 +10,9 @@ clean:
 
 test:
 	go test -v -race
+
+watch:
+	find . | entr -s 'go test -v -race'
 
 data:
 	wget \
