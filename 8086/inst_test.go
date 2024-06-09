@@ -236,8 +236,33 @@ mov [bp], ch
 		{
 			name: "add sub cmp jnz",
 			inFile: []byte{
-				0b00000011, 0b00011000, 0b00000011, 0b01011110, 0b00000000, 0b10000011,
-				0b11000110, 0b00000010, 0b10000011, 0b11000101, 0b00000010, 0b10000011,
+				// 1: add bx, [bx+si]
+				//   add reg/mem with register to either d=1 w=1
+				//   d=1: instruction dest is specified in the REG field
+				//   w=1: instruction operates on word data
+				//   mod=00: memory mode, no displacement: [bx+si]
+				//   reg=011: bx (b/c w=1)
+				//   rm=000
+				0b00000011, 0b00011000,
+
+				// 2: add bx, [bp]
+				//	 add reg/mem with register to either d=1 w=1
+				//   d=1: instruction dest is specified in the REG field
+				//   w=1: instruction operates on word data
+				//   mod=01: memory mode, 8-bit displacement follows
+				//   reg=011: bx (b/c w=1)
+				//   rm=110: [BP+D8] (NOTE: D8 is 0)
+				0b00000011, 0b01011110, 0b00000000,
+
+				// 3: add si, 2
+				//   add immediate to reg/mem (up to 6 bytes)
+				//   s=1 // sign extend 8-bit immediate data to 16 bits if W=1
+				//   w=1
+				//   mod=11 Register Mode (no displacement)
+				//   reg=000 (ax) (not used?)
+				//   rm=110 (si)
+				0b10000011, 0b11000110, 0b00000010,
+				0b10000011, 0b11000101, 0b00000010, 0b10000011,
 				0b11000001, 0b00001000, 0b00000011, 0b01011110, 0b00000000, 0b00000011,
 				0b01001111, 0b00000010, 0b00000010, 0b01111010, 0b00000100, 0b00000011,
 				0b01111011, 0b00000110, 0b00000001, 0b00011000, 0b00000001, 0b01011110,

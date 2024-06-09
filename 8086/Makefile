@@ -12,7 +12,7 @@ test:
 	go test -v -race
 
 watch:
-	find . | entr -s 'go test -v -race'
+	find . | entr -s 'go test -v -race -run=TestAsm/add_sub_cmp_jnz'
 
 data:
 	wget \

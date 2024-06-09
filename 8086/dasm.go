@@ -150,22 +150,32 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 		}
 		i += 4
 	case ModTypeRegToReg:
+		// TODO: Write mote tests for this case
+		s := byteIs(b1, dMask, dMask)
 		rmS, err := regLookup(rm, w)
 		if err != nil {
 			return "", 0, err
 		}
-		dest, source = rmS, regS
-		i += 2
-		// var iInc int
+		dest = rmS
 		var imm string
-		if w {
-			imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+1]))
-			// iInc = 2
+		iInc := 2
+		if s {
+			// sign extend 8 bit immediate data to 16 bits
+			// instruction operates on word (2 byte) data
+			imm = fmt.Sprintf("%d", int8(data[i+2]))
+			iInc += 1
 		} else {
-			imm = fmt.Sprintf("%d", int8(data[i+1]))
-			// iInc = 1
+			if w {
+				// instruction operates on word (2 byte) data
+				imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+1]))
+				iInc += 2
+			} else {
+				imm = fmt.Sprintf("%d", int8(data[i+1]))
+				iInc += 1
+			}
 		}
-		panic(rmS + " " + imm)
+		i += iInc
+		source = imm
 	default:
 		return "", 0, errors.New("mod field had unexpected value")
 	}
@@ -262,6 +272,7 @@ func Dasm(data []byte) ([]byte, error) {
 	res := "bits 16\n\n"
 	var movT OpType
 	for i := 0; i < len(data); {
+		fmt.Printf("i: %d\n", i)
 		movT = opType(data[i])
 		switch movT {
 		case OpTypeMovMemToAcc:
