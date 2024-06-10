@@ -81,7 +81,6 @@ func opTypeMovImmToRegOrMem(data []byte, i int) (string, int, error) {
 func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 	b1 := data[i]
 	b2 := data[i+1]
-	// panic(fmt.Sprintf("%b %b", b1, b2))
 
 	var inst string
 	switch toAddSubCmp(b2 << 2 >> 5) {
@@ -95,7 +94,6 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 		panic("invalid AddSubCmp type")
 	}
 
-	// s := byteIs(b1, dMask, dMask)
 	w := byteIs(b1, wMask, wMask)
 
 	reg := b2 << 2 >> 5
@@ -108,6 +106,7 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 	}
 	var source string
 	var dest string
+	var prefix string
 	switch modType(b2) {
 	case ModTypeMemoryNoDisplacement:
 		// check for if R/M == 110 & if so do the 16 bit displacement
@@ -120,9 +119,32 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 		if err != nil {
 			return "", 0, err
 		}
+		// panic(fmt.Sprintf("%s memmodenodisplacement %08b %08b w: %t, reg: %s, eac: %s", inst, b1, b2, w, regS, eac))
+		s := byteIs(b1, dMask, dMask)
+		var imm string
+		iInc := 2
+		if s {
+			prefix = "byte"
+			// sign extend 8 bit immediate data to 16 bits
+			// instruction operates on word (2 byte) data
+			imm = fmt.Sprintf("%d", int8(data[i+2]))
+			iInc += 1
+		} else {
+			if w {
+				prefix = "word"
+				// instruction operates on word (2 byte) data
+				imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+3]))
+				iInc += 2
+			} else {
+				prefix = "byte"
+				imm = fmt.Sprintf("%d", int8(data[i+2]))
+				iInc += 1
+			}
+		}
 
-		dest, source = fmt.Sprintf("[%s]", eac), regS
-		i += 2
+		source = imm
+		dest = fmt.Sprintf("[%s]", eac)
+		i += iInc
 	case ModTypeMemory8BitDisplacement:
 		eac, err := memMode8BitDisplacmentLookup(rm)
 		if err != nil {
@@ -138,17 +160,40 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 		i += 3
 
 	case ModTypeMemory16BitDisplacement:
+		s := byteIs(b1, dMask, dMask)
 		eac, err := memMode16BitDisplacmentLookup(rm)
 		if err != nil {
 			return "", 0, err
 		}
+
 		displacement := int16(data[i+3])<<8 | int16(data[i+2])
 		if displacement == 0 {
-			dest, source = fmt.Sprintf("[%s]", eac), regS
+			dest = fmt.Sprintf("[%s]", eac)
 		} else {
-			dest, source = fmt.Sprintf("[%s + %d]", eac, displacement), regS
+			dest = fmt.Sprintf("[%s + %d]", eac, displacement)
 		}
-		i += 4
+
+		var imm string
+		iInc := 4
+		if w {
+			prefix = "word"
+			if s {
+				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+				iInc += 1
+			} else {
+				// instruction operates on word (2 byte) data
+				imm = fmt.Sprintf("%d", int16(data[i+iInc])<<8|int16(data[i+iInc+1]))
+				iInc += 2
+			}
+		} else {
+			prefix = "byte"
+			imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+			iInc += 1
+		}
+		// }
+		source = imm
+
+		i += iInc
 	case ModTypeRegToReg:
 		// TODO: Write mote tests for this case
 		s := byteIs(b1, dMask, dMask)
@@ -160,24 +205,25 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 		var imm string
 		iInc := 2
 		if s {
-			// sign extend 8 bit immediate data to 16 bits
-			// instruction operates on word (2 byte) data
-			imm = fmt.Sprintf("%d", int8(data[i+2]))
+			imm = fmt.Sprintf("%d", int8(data[i+iInc]))
 			iInc += 1
 		} else {
 			if w {
-				// instruction operates on word (2 byte) data
-				imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+1]))
+				imm = fmt.Sprintf("%d", int16(data[i+iInc])<<8|int16(data[i+iInc+1]))
 				iInc += 2
 			} else {
-				imm = fmt.Sprintf("%d", int8(data[i+1]))
+				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
 				iInc += 1
 			}
 		}
+
 		i += iInc
 		source = imm
 	default:
 		return "", 0, errors.New("mod field had unexpected value")
+	}
+	if prefix != "" {
+		return fmt.Sprintf("%s %s %s, %s\n", inst, prefix, dest, source), i, nil
 	}
 	return fmt.Sprintf("%s %s, %s\n", inst, dest, source), i, nil
 }
@@ -355,7 +401,15 @@ func Dasm(data []byte) ([]byte, error) {
 			i = tmpI
 			res += r
 		case OpTypeAddImmToAcc:
-			panic("OpTypeAddImmToAcc unimplemented")
+			w := data[i]&0b00000001 == 0b00000001
+			imm := fmt.Sprintf("%d", int8(data[i+1]))
+			iInc := 2
+			if w {
+				imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+1]))
+				iInc += 1
+			}
+			res += fmt.Sprintf("add ax, %s\n", imm)
+			i += iInc
 		case OpTypeSubRegMemWithReg:
 			panic("OpTypeSubRegMemWithReg unimplemented")
 		case OpTypeSubImmToAcc:
