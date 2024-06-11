@@ -120,4 +120,23 @@ const (
 	OpTypeSubImmToAcc
 	OpTypeCmpRegMemWithReg
 	OpTypeCmpImmToAcc
+	OpTypeJneOrJnz
+	OpTypeJeOrJz
+	OpTypeJlOrJnge
+	OpTypeJleOrJng
+	OpTypeJbeOrJna
+	OpTypeJpOrJpe
+	OpTypeJo
+	OpTypeJs
+	OpTypeJnlOrJge
+	OpTypeJnleOrJg
+	OpTypeJnbOrJae
+	OpTypeJnbeOrJa
+	OpTypeJnpOrJpo
+	OpTypeJno
+	OpTypeJns
+	OpTypeLoop
+	OpTypeLoopzOrLoope
+	OpTypeLoopnzOrLoopne
+	OpTypeJcxz
 )

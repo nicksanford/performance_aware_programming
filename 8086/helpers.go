@@ -136,5 +136,46 @@ func opType(b byte) OpType {
 		return OpTypeCmpImmToAcc
 	}
 
+	switch b {
+	case 0b01110101:
+		return OpTypeJneOrJnz
+	case 0b01110100:
+		return OpTypeJeOrJz
+	case 0b01111100:
+		return OpTypeJlOrJnge
+	case 0b01111110:
+		return OpTypeJleOrJng
+	case 0b01110110:
+		return OpTypeJbeOrJna
+	case 0b01111010:
+		return OpTypeJpOrJpe
+	case 0b01110000:
+		return OpTypeJo
+	case 0b01111000:
+		return OpTypeJs
+	case 0b01111101:
+		return OpTypeJnlOrJge
+	case 0b01111111:
+		return OpTypeJnleOrJg
+	case 0b01110011:
+		return OpTypeJnbOrJae
+	case 0b01110111:
+		return OpTypeJnbeOrJa
+	case 0b01111011:
+		return OpTypeJnpOrJpo
+	case 0b01110001:
+		return OpTypeJno
+	case 0b01111001:
+		return OpTypeJns
+	case 0b11100010:
+		return OpTypeLoop
+	case 0b11100001:
+		return OpTypeLoopzOrLoope
+	case 0b11100000:
+		return OpTypeLoopnzOrLoopne
+	case 0b11100011:
+		return OpTypeJcxz
+	}
+
 	return OpTypeInvalid
 }

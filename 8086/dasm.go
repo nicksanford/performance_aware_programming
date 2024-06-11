@@ -28,14 +28,16 @@ func opTypeMovImmToRegOrMem(data []byte, i int) (string, int, error) {
 		if rm == 0b110 {
 			i += 4
 			panic("ModTypeMemoryNoDisplacement unimplemented")
-		}
-		eac, err := memModeLookup(rm)
-		if err != nil {
-			return "", 0, err
-		}
+		} else {
+			eac, err := memModeLookup(rm)
+			if err != nil {
+				return "", 0, err
+			}
 
-		dest, source = fmt.Sprintf("[%s]", eac), regS
-		i += 2
+			dest, source = fmt.Sprintf("[%s]", eac), regS
+			i += 2
+
+		}
 	case ModTypeMemory8BitDisplacement:
 		eac, err := memMode8BitDisplacmentLookup(rm)
 		if err != nil {
@@ -55,7 +57,7 @@ func opTypeMovImmToRegOrMem(data []byte, i int) (string, int, error) {
 		if err != nil {
 			return "", 0, err
 		}
-		displacement := int16(data[i+3])<<8 | int16(data[i+2])
+		displacement := int16(data[i+2]) | int16(data[i+3])<<8
 		if displacement == 0 {
 			dest, source = fmt.Sprintf("[%s]", eac), regS
 		} else {
@@ -111,40 +113,61 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 	case ModTypeMemoryNoDisplacement:
 		// check for if R/M == 110 & if so do the 16 bit displacement
 		// DIRECT
-		if rm == 0b110 {
-			i += 4
-			panic("ModTypeMemoryNoDisplacement unimplemented")
-		}
-		eac, err := memModeLookup(rm)
-		if err != nil {
-			return "", 0, err
-		}
-		// panic(fmt.Sprintf("%s memmodenodisplacement %08b %08b w: %t, reg: %s, eac: %s", inst, b1, b2, w, regS, eac))
 		s := byteIs(b1, dMask, dMask)
-		var imm string
-		iInc := 2
-		if s {
-			prefix = "byte"
-			// sign extend 8 bit immediate data to 16 bits
-			// instruction operates on word (2 byte) data
-			imm = fmt.Sprintf("%d", int8(data[i+2]))
-			iInc += 1
-		} else {
+		if rm == 0b110 {
+			// panic(fmt.Sprintf("ModTypeMemoryNoDisplacement unimplemented %08b %08b %08b %08b", b1, b2, data[i+2], data[i+3]))
+			iInc := 2
+			dest = fmt.Sprintf("[%s]", fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8))
+			iInc += 2
+			var imm string
 			if w {
 				prefix = "word"
-				// instruction operates on word (2 byte) data
-				imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+3]))
-				iInc += 2
+				if s {
+					imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+					iInc += 1
+				} else {
+					// instruction operates on word (2 byte) data
+					imm = fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8)
+					iInc += 2
+				}
 			} else {
 				prefix = "byte"
-				imm = fmt.Sprintf("%d", int8(data[i+2]))
+				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
 				iInc += 1
 			}
-		}
+			i += iInc
+			source = imm
+		} else {
+			eac, err := memModeLookup(rm)
+			if err != nil {
+				return "", 0, err
+			}
+			// panic(fmt.Sprintf("%s memmodenodisplacement %08b %08b w: %t, reg: %s, eac: %s", inst, b1, b2, w, regS, eac))
+			var imm string
+			iInc := 2
+			if s {
+				prefix = "byte"
+				// sign extend 8 bit immediate data to 16 bits
+				// instruction operates on word (2 byte) data
+				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+				iInc += 1
+			} else {
+				if w {
+					prefix = "word"
+					// instruction operates on word (2 byte) data
+					imm = fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8)
+					iInc += 2
+				} else {
+					prefix = "byte"
+					imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+					iInc += 1
+				}
+			}
 
-		source = imm
-		dest = fmt.Sprintf("[%s]", eac)
-		i += iInc
+			source = imm
+			dest = fmt.Sprintf("[%s]", eac)
+			i += iInc
+		}
 	case ModTypeMemory8BitDisplacement:
 		eac, err := memMode8BitDisplacmentLookup(rm)
 		if err != nil {
@@ -166,7 +189,7 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 			return "", 0, err
 		}
 
-		displacement := int16(data[i+3])<<8 | int16(data[i+2])
+		displacement := int16(data[i+2]) | int16(data[i+3])<<8
 		if displacement == 0 {
 			dest = fmt.Sprintf("[%s]", eac)
 		} else {
@@ -182,7 +205,7 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 				iInc += 1
 			} else {
 				// instruction operates on word (2 byte) data
-				imm = fmt.Sprintf("%d", int16(data[i+iInc])<<8|int16(data[i+iInc+1]))
+				imm = fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8)
 				iInc += 2
 			}
 		} else {
@@ -209,7 +232,7 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 			iInc += 1
 		} else {
 			if w {
-				imm = fmt.Sprintf("%d", int16(data[i+iInc])<<8|int16(data[i+iInc+1]))
+				imm = fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8)
 				iInc += 2
 			} else {
 				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
@@ -233,7 +256,7 @@ func f(data []byte, i int) (string, int, error) {
 	b2 := data[i+1]
 	w := b1&0b00000001 == 0b00000001
 	var inst string
-	switch toAddSubCmp(data[i] << 2 >> 4) {
+	switch toAddSubCmp(b1 << 2 >> 5) {
 	case Add:
 		inst = "add"
 	case Sub:
@@ -288,7 +311,7 @@ func f(data []byte, i int) (string, int, error) {
 		if err != nil {
 			return "", 0, err
 		}
-		displacement := int16(data[i+3])<<8 | int16(data[i+2])
+		displacement := int16(data[i+2]) | int16(data[i+3])<<8
 		if displacement == 0 {
 			dest, source = fmt.Sprintf("[%s]", eac), regS
 		} else {
@@ -318,7 +341,7 @@ func Dasm(data []byte) ([]byte, error) {
 	res := "bits 16\n\n"
 	var movT OpType
 	for i := 0; i < len(data); {
-		fmt.Printf("i: %d\n", i)
+		fmt.Printf("i: %d, %08b\n", i, data[i])
 		movT = opType(data[i])
 		switch movT {
 		case OpTypeMovMemToAcc:
@@ -339,7 +362,7 @@ func Dasm(data []byte) ([]byte, error) {
 			var iInc int
 			var imm string
 			if w {
-				imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+1]))
+				imm = fmt.Sprintf("%d", int16(data[i+1])|int16(data[i+2])<<8)
 				iInc = 2
 			} else {
 				imm = fmt.Sprintf("%d", int8(data[i+1]))
@@ -404,20 +427,92 @@ func Dasm(data []byte) ([]byte, error) {
 			w := data[i]&0b00000001 == 0b00000001
 			imm := fmt.Sprintf("%d", int8(data[i+1]))
 			iInc := 2
+			target := "al"
 			if w {
-				imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+1]))
+				imm = fmt.Sprintf("%d", int16(data[i+1])|int16(data[i+2])<<8)
 				iInc += 1
+				target = "ax"
 			}
-			res += fmt.Sprintf("add ax, %s\n", imm)
+			res += fmt.Sprintf("add %s, %s\n", target, imm)
 			i += iInc
 		case OpTypeSubRegMemWithReg:
-			panic("OpTypeSubRegMemWithReg unimplemented")
+			// panic(fmt.Sprintf("%08b %08b", data[i], data[i+1]))
+			r, tmpI, err := f(data, i)
+			if err != nil {
+				return nil, err
+			}
+			i = tmpI
+			res += r
 		case OpTypeSubImmToAcc:
-			panic("OpTypeSubImmToAcc unimplemented")
+			w := data[i]&0b00000001 == 0b00000001
+			imm := fmt.Sprintf("%d", int8(data[i+1]))
+			iInc := 2
+			target := "al"
+			if w {
+				imm = fmt.Sprintf("%d", int16(data[i+1])|int16(data[i+2])<<8)
+				iInc += 1
+				target = "ax"
+			}
+			res += fmt.Sprintf("sub %s, %s\n", target, imm)
+			i += iInc
 		case OpTypeCmpRegMemWithReg:
-			panic("OpTypeCmpRegMemWithReg unimplemented")
+			r, tmpI, err := f(data, i)
+			if err != nil {
+				return nil, err
+			}
+			i = tmpI
+			res += r
 		case OpTypeCmpImmToAcc:
-			panic("OpTypeCmpImmToAcc unimplemented")
+			w := data[i]&0b00000001 == 0b00000001
+			imm := fmt.Sprintf("%d", int8(data[i+1]))
+			iInc := 2
+			target := "al"
+			if w {
+				imm = fmt.Sprintf("%d", int16(data[i+1])|int16(data[i+2])<<8)
+				iInc += 1
+				target = "ax"
+			}
+			res += fmt.Sprintf("cmp %s, %s\n", target, imm)
+			i += iInc
+		case OpTypeJneOrJnz:
+			panic("OpTypeJneOrJnz unimplemented")
+		case OpTypeJeOrJz:
+			panic("OpTypeJeOrJz unimplemented")
+		case OpTypeJlOrJnge:
+			panic("OpTypeJlOrJnge unimplemented")
+		case OpTypeJleOrJng:
+			panic("OpTypeJleOrJng unimplemented")
+		case OpTypeJbeOrJna:
+			panic("OpTypeJbeOrJna unimplemented")
+		case OpTypeJpOrJpe:
+			panic("OpTypeJpOrJpe unimplemented")
+		case OpTypeJo:
+			panic("OpTypeJo unimplemented")
+		case OpTypeJs:
+			panic("OpTypeJs unimplemented")
+		case OpTypeJnlOrJge:
+			panic("OpTypeJnlOrJge unimplemented")
+		case OpTypeJnleOrJg:
+			panic("OpTypeJnleOrJg unimplemented")
+		case OpTypeJnbOrJae:
+			panic("OpTypeJnbOrJae unimplemented")
+		case OpTypeJnbeOrJa:
+			panic("OpTypeJnbeOrJa unimplemented")
+		case OpTypeJnpOrJpo:
+			panic("OpTypeJnpOrJpo unimplemented")
+		case OpTypeJno:
+			panic("OpTypeJno unimplemented")
+		case OpTypeJns:
+			panic("OpTypeJns unimplemented")
+		case OpTypeLoop:
+			panic("OpTypeLoop unimplemented")
+		case OpTypeLoopzOrLoope:
+			panic("OpTypeLoopzOrLoope unimplemented")
+		case OpTypeLoopnzOrLoopne:
+			panic("OpTypeLoopnzOrLoopne unimplemented")
+		case OpTypeJcxz:
+			panic("OpTypeJcxz unimplemented")
+
 		default:
 			return nil, fmt.Errorf("unexpected opcode %d", movT)
 		}
