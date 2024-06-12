@@ -125,6 +125,7 @@ const (
 	OpTypeJlOrJnge
 	OpTypeJleOrJng
 	OpTypeJbeOrJna
+	OpTypeJbOrJnae
 	OpTypeJpOrJpe
 	OpTypeJo
 	OpTypeJs

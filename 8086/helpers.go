@@ -147,6 +147,8 @@ func opType(b byte) OpType {
 		return OpTypeJleOrJng
 	case 0b01110110:
 		return OpTypeJbeOrJna
+	case 0b01110010:
+		return OpTypeJbOrJnae
 	case 0b01111010:
 		return OpTypeJpOrJpe
 	case 0b01110000:

@@ -475,43 +475,65 @@ func Dasm(data []byte) ([]byte, error) {
 			res += fmt.Sprintf("cmp %s, %s\n", target, imm)
 			i += iInc
 		case OpTypeJneOrJnz:
-			panic("OpTypeJneOrJnz unimplemented")
+			res += fmt.Sprintf("jne %d\n", data[i+1])
+			i += 2
 		case OpTypeJeOrJz:
-			panic("OpTypeJeOrJz unimplemented")
+			res += fmt.Sprintf("je %d\n", data[i+1])
+			i += 2
 		case OpTypeJlOrJnge:
-			panic("OpTypeJlOrJnge unimplemented")
+			res += fmt.Sprintf("jl %d\n", data[i+1])
+			i += 2
 		case OpTypeJleOrJng:
-			panic("OpTypeJleOrJng unimplemented")
+			res += fmt.Sprintf("jle %d\n", data[i+1])
+			i += 2
 		case OpTypeJbeOrJna:
-			panic("OpTypeJbeOrJna unimplemented")
+			res += fmt.Sprintf("jbe %d\n", data[i+1])
+			i += 2
+		case OpTypeJbOrJnae:
+			res += fmt.Sprintf("jb %d\n", data[i+1])
+			i += 2
 		case OpTypeJpOrJpe:
-			panic("OpTypeJpOrJpe unimplemented")
+			res += fmt.Sprintf("jp %d\n", data[i+1])
+			i += 2
 		case OpTypeJo:
-			panic("OpTypeJo unimplemented")
+			res += fmt.Sprintf("jo %d\n", data[i+1])
+			i += 2
 		case OpTypeJs:
-			panic("OpTypeJs unimplemented")
+			res += fmt.Sprintf("js %d\n", data[i+1])
+			i += 2
 		case OpTypeJnlOrJge:
-			panic("OpTypeJnlOrJge unimplemented")
+			res += fmt.Sprintf("jnl %d\n", data[i+1])
+			i += 2
 		case OpTypeJnleOrJg:
-			panic("OpTypeJnleOrJg unimplemented")
+			res += fmt.Sprintf("jnle %d\n", data[i+1])
+			i += 2
 		case OpTypeJnbOrJae:
-			panic("OpTypeJnbOrJae unimplemented")
+			res += fmt.Sprintf("jnb %d\n", data[i+1])
+			i += 2
 		case OpTypeJnbeOrJa:
-			panic("OpTypeJnbeOrJa unimplemented")
+			res += fmt.Sprintf("jnbe %d\n", data[i+1])
+			i += 2
 		case OpTypeJnpOrJpo:
-			panic("OpTypeJnpOrJpo unimplemented")
+			res += fmt.Sprintf("jnp %d\n", data[i+1])
+			i += 2
 		case OpTypeJno:
-			panic("OpTypeJno unimplemented")
+			res += fmt.Sprintf("jno %d\n", data[i+1])
+			i += 2
 		case OpTypeJns:
-			panic("OpTypeJns unimplemented")
+			res += fmt.Sprintf("jns %d\n", data[i+1])
+			i += 2
 		case OpTypeLoop:
-			panic("OpTypeLoop unimplemented")
+			res += fmt.Sprintf("loop %d\n", data[i+1])
+			i += 2
 		case OpTypeLoopzOrLoope:
-			panic("OpTypeLoopzOrLoope unimplemented")
+			res += fmt.Sprintf("loopz %d\n", data[i+1])
+			i += 2
 		case OpTypeLoopnzOrLoopne:
-			panic("OpTypeLoopnzOrLoopne unimplemented")
+			res += fmt.Sprintf("loopnz %d\n", data[i+1])
+			i += 2
 		case OpTypeJcxz:
-			panic("OpTypeJcxz unimplemented")
+			res += fmt.Sprintf("jcxz %d\n", data[i+1])
+			i += 2
 
 		default:
 			return nil, fmt.Errorf("unexpected opcode %d", movT)
