@@ -341,7 +341,6 @@ func Dasm(data []byte) ([]byte, error) {
 	res := "bits 16\n\n"
 	var movT OpType
 	for i := 0; i < len(data); {
-		fmt.Printf("i: %d, %08b\n", i, data[i])
 		movT = opType(data[i])
 		switch movT {
 		case OpTypeMovMemToAcc:
@@ -388,34 +387,6 @@ func Dasm(data []byte) ([]byte, error) {
 			i = tmpI
 			res += r
 
-			// w := data[i]<<4>>7 == 0b1
-			// reg := data[i] << 5 >> 5
-			// regS, err := regLookup(reg, w)
-			// if err != nil {
-			// 	return nil, err
-			// }
-			// var iInc int
-			// var imm string
-			// if w {
-			// 	imm = fmt.Sprintf("%d", int16(data[i+2])<<8|int16(data[i+1]))
-			// 	iInc = 2
-			// } else {
-			// 	imm = fmt.Sprintf("%d", int8(data[i+1]))
-			// 	iInc = 1
-			// }
-			// var inst string
-			// switch toAddSubCmp(data[i+1] << 2 >> 5) {
-			// case Add:
-			// 	inst = "add"
-			// case Sub:
-			// 	inst = "sub"
-			// case Cmp:
-			// 	inst = "cmp"
-			// default:
-			// 	panic("invalid AddSubCmp type")
-			// }
-			// res += fmt.Sprintf("%s %s, %s\n", inst, regS, imm)
-			// i += iInc + 1
 		case OpTypeAddRegMemWithReg:
 			r, tmpI, err := f(data, i)
 			if err != nil {
@@ -436,7 +407,6 @@ func Dasm(data []byte) ([]byte, error) {
 			res += fmt.Sprintf("add %s, %s\n", target, imm)
 			i += iInc
 		case OpTypeSubRegMemWithReg:
-			// panic(fmt.Sprintf("%08b %08b", data[i], data[i+1]))
 			r, tmpI, err := f(data, i)
 			if err != nil {
 				return nil, err
@@ -538,7 +508,6 @@ func Dasm(data []byte) ([]byte, error) {
 		default:
 			return nil, fmt.Errorf("unexpected opcode %d", movT)
 		}
-		println(res)
 	}
 	return []byte(res), nil
 }

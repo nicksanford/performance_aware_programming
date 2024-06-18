@@ -11,7 +11,7 @@ import (
 func main() {
 	l := log.New(os.Stderr, "", 0)
 	help := flag.Bool("h", false, "help")
-	assemble := flag.Bool("a", false, "assemble, defaults to false i.e. disassemble")
+	simulate := flag.Bool("s", true, "simulate, defaults to true")
 	flag.Parse()
 	if *help {
 		l.Printf("usage: %s <file>\n", os.Args[0])
@@ -30,9 +30,25 @@ func main() {
 		l.Fatalf(err.Error())
 	}
 
-	if *assemble {
-		data, err = inst.Asm(data)
+	if *simulate {
+		data, err = inst.Dasm(data)
 		if err != nil {
+			l.Fatal(err.Error())
+		}
+
+		lines := inst.ToLines(data)
+
+		tokens, err := inst.Tokenize(lines)
+		if err != nil {
+			l.Fatal(err.Error())
+		}
+
+		result, err := inst.Simulate(tokens)
+		if err != nil {
+			l.Fatal(err.Error())
+		}
+
+		if _, err := os.Stdout.WriteString(result.String()); err != nil {
 			l.Fatal(err.Error())
 		}
 	} else {
@@ -40,9 +56,9 @@ func main() {
 		if err != nil {
 			l.Fatal(err.Error())
 		}
-	}
 
-	if _, err := os.Stdout.Write(data); err != nil {
-		l.Fatal(err.Error())
+		if _, err := os.Stdout.Write(data); err != nil {
+			l.Fatal(err.Error())
+		}
 	}
 }
