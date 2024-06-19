@@ -86,11 +86,11 @@ func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
 
 	var inst string
 	switch toAddSubCmp(b2 << 2 >> 5) {
-	case Add:
+	case AddSubCmpAdd:
 		inst = "add"
-	case Sub:
+	case AddSubCmpSub:
 		inst = "sub"
-	case Cmp:
+	case AddSubCmpCmp:
 		inst = "cmp"
 	default:
 		panic("invalid AddSubCmp type")
@@ -257,11 +257,11 @@ func f(data []byte, i int) (string, int, error) {
 	w := b1&0b00000001 == 0b00000001
 	var inst string
 	switch toAddSubCmp(b1 << 2 >> 5) {
-	case Add:
+	case AddSubCmpAdd:
 		inst = "add"
-	case Sub:
+	case AddSubCmpSub:
 		inst = "sub"
-	case Cmp:
+	case AddSubCmpCmp:
 		inst = "cmp"
 	default:
 		panic("invalid AddSubCmp type")
@@ -515,21 +515,21 @@ func Dasm(data []byte) ([]byte, error) {
 type AddSubCmp uint8
 
 const (
-	Unknown AddSubCmp = iota
-	Add
-	Sub
-	Cmp
+	AddSubCmpUnknown AddSubCmp = iota
+	AddSubCmpAdd
+	AddSubCmpSub
+	AddSubCmpCmp
 )
 
 func toAddSubCmp(b byte) AddSubCmp {
 	switch b {
 	case 0b000:
-		return Add
+		return AddSubCmpAdd
 	case 0b101:
-		return Sub
+		return AddSubCmpSub
 	case 0b111:
-		return Cmp
+		return AddSubCmpCmp
 	default:
-		return Unknown
+		return AddSubCmpUnknown
 	}
 }

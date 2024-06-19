@@ -25,4 +25,8 @@ data:
 		$(DATA_URL)/listing_0040_challenge_movs.asm \
 		$(DATA_URL)/listing_0041_add_sub_cmp_jnz.asm \
 		$(DATA_URL)/listing_0041_add_sub_cmp_jnz \
+		$(DATA_URL)/listing_0043_immediate_movs \
+		$(DATA_URL)/listing_0043_immediate_movs.asm \
+		$(DATA_URL)/listing_0044_register_movs \
+		$(DATA_URL)/listing_0044_register_movs.asm \
 		-P ./data
