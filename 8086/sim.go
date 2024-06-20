@@ -39,7 +39,12 @@ type Tokens struct {
 	instructions []Inst
 }
 
-type CPU [8]uint16
+type CPU struct {
+	regs  [8]uint16
+	signF bool
+	zeroF bool
+}
+
 type SimulationResult struct {
 	instructions []Inst
 	changes      []string
@@ -52,6 +57,12 @@ const (
 	InstTypeUnknown InstType = iota
 	InstTypeMovImmediate
 	InstTypeMovRegToReg
+	InstTypeAddImmediate
+	InstTypeAddRegToReg
+	InstTypeSubImmediate
+	InstTypeSubRegToReg
+	InstTypeCmpImmediate
+	InstTypeCmpRegToReg
 )
 
 type Inst struct {
@@ -121,6 +132,42 @@ func Tokenize(lines []string) (Tokens, error) {
 					s:              l,
 					targetRegister: targetRegister,
 					sourceRegister: sourceRegister})
+			case out[0] == "add" && targetRegOk && err == nil:
+				insts = append(insts, Inst{
+					t:               InstTypeAddImmediate,
+					s:               l,
+					targetRegister:  targetRegister,
+					sourceImmediate: uint16(i)})
+			case out[0] == "add" && targetRegOk && sourceRegOk:
+				insts = append(insts, Inst{
+					t:              InstTypeAddRegToReg,
+					s:              l,
+					targetRegister: targetRegister,
+					sourceRegister: sourceRegister})
+			case out[0] == "sub" && targetRegOk && err == nil:
+				insts = append(insts, Inst{
+					t:               InstTypeSubImmediate,
+					s:               l,
+					targetRegister:  targetRegister,
+					sourceImmediate: uint16(i)})
+			case out[0] == "sub" && targetRegOk && sourceRegOk:
+				insts = append(insts, Inst{
+					t:              InstTypeSubRegToReg,
+					s:              l,
+					targetRegister: targetRegister,
+					sourceRegister: sourceRegister})
+			case out[0] == "cmp" && targetRegOk && err == nil:
+				insts = append(insts, Inst{
+					t:               InstTypeCmpImmediate,
+					s:               l,
+					targetRegister:  targetRegister,
+					sourceImmediate: uint16(i)})
+			case out[0] == "cmp" && targetRegOk && sourceRegOk:
+				insts = append(insts, Inst{
+					t:              InstTypeCmpRegToReg,
+					s:              l,
+					targetRegister: targetRegister,
+					sourceRegister: sourceRegister})
 			default:
 				panic("at the disco")
 			}
@@ -138,13 +185,53 @@ func Simulate(ts Tokens) (SimulationResult, error) {
 	for _, t := range ts.instructions {
 		switch t.t {
 		case InstTypeMovImmediate:
-			before := cpu[t.targetRegister]
-			cpu[t.targetRegister] = t.sourceImmediate
-			changes = append(changes, fmt.Sprintf("%s:%#x->%#x", indexToReg[t.targetRegister], before, cpu[t.targetRegister]))
+			before := cpu.regs[t.targetRegister]
+			cpu.regs[t.targetRegister] = t.sourceImmediate
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister]))
 		case InstTypeMovRegToReg:
-			before := cpu[t.targetRegister]
-			cpu[t.targetRegister] = cpu[t.sourceRegister]
-			changes = append(changes, fmt.Sprintf("%s:%#x->%#x", indexToReg[t.targetRegister], before, cpu[t.targetRegister]))
+			before := cpu.regs[t.targetRegister]
+			cpu.regs[t.targetRegister] = cpu.regs[t.sourceRegister]
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister]))
+		case InstTypeAddImmediate:
+			before := cpu.regs[t.targetRegister]
+			cpuFlagsBefore := cpu.FlagsString()
+			cpu.regs[t.targetRegister] += t.sourceImmediate
+			cpu.zeroF = cpu.regs[t.targetRegister] == 0
+			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister], cpuFlagsBefore, cpu.FlagsString()))
+		case InstTypeAddRegToReg:
+			before := cpu.regs[t.targetRegister]
+			cpuFlagsBefore := cpu.FlagsString()
+			cpu.regs[t.targetRegister] += cpu.regs[t.sourceRegister]
+			cpu.zeroF = cpu.regs[t.targetRegister] == 0
+			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister], cpuFlagsBefore, cpu.FlagsString()))
+		case InstTypeSubImmediate:
+			before := cpu.regs[t.targetRegister]
+			cpuFlagsBefore := cpu.FlagsString()
+			cpu.regs[t.targetRegister] -= t.sourceImmediate
+			cpu.zeroF = cpu.regs[t.targetRegister] == 0
+			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister], cpuFlagsBefore, cpu.FlagsString()))
+		case InstTypeSubRegToReg:
+			before := cpu.regs[t.targetRegister]
+			cpuFlagsBefore := cpu.FlagsString()
+			cpu.regs[t.targetRegister] -= cpu.regs[t.sourceRegister]
+			cpu.zeroF = cpu.regs[t.targetRegister] == 0
+			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister], cpuFlagsBefore, cpu.FlagsString()))
+		case InstTypeCmpImmediate:
+			cpuFlagsBefore := cpu.FlagsString()
+			cpu.regs[t.targetRegister] -= t.sourceImmediate
+			cpu.zeroF = cpu.regs[t.targetRegister] == 0
+			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("flags:%s->%s", cpuFlagsBefore, cpu.FlagsString()))
+		case InstTypeCmpRegToReg:
+			cpuFlagsBefore := cpu.FlagsString()
+			res := cpu.regs[t.targetRegister] - cpu.regs[t.sourceRegister]
+			cpu.zeroF = res == 0
+			cpu.signF = (res>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("flags:%s->%s", cpuFlagsBefore, cpu.FlagsString()))
 		default:
 			panic("at the discotek")
 		}
@@ -163,9 +250,22 @@ func (sr *SimulationResult) String() string {
 	}
 
 	ret += "\nFinal registers:\n"
-	for i := range sr.cpu {
-		ret += fmt.Sprintf("      %s: 0x%04x (%d)\n", indexToReg[i], sr.cpu[i], sr.cpu[i])
+	for i := range sr.cpu.regs {
+		ret += fmt.Sprintf("      %s: 0x%04x (%d)\n", indexToReg[i], sr.cpu.regs[i], sr.cpu.regs[i])
 	}
 
 	return ret
+}
+
+func (cpu CPU) FlagsString() string {
+	switch {
+	case cpu.signF && cpu.zeroF:
+		return "SZ"
+	case cpu.signF:
+		return "S"
+	case cpu.zeroF:
+		return "Z"
+	default:
+		return ""
+	}
 }

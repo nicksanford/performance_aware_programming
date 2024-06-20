@@ -29,4 +29,6 @@ data:
 		$(DATA_URL)/listing_0043_immediate_movs.asm \
 		$(DATA_URL)/listing_0044_register_movs \
 		$(DATA_URL)/listing_0044_register_movs.asm \
+		$(DATA_URL)/listing_0046_add_sub_cmp \
+		$(DATA_URL)/listing_0046_add_sub_cmp.asm \
 		-P ./data
