@@ -2,6 +2,7 @@ package inst
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -68,6 +69,30 @@ func (it InstType) String() string {
 	default:
 		return fmt.Sprintf("InstTypeUnknown(%d)", it)
 	}
+}
+
+func PrintSim(data []byte, w io.Writer) error {
+	data, err := Dasm(data)
+	if err != nil {
+		return err
+	}
+
+	lines := ToLines(data)
+
+	tokens, err := Tokenize(lines)
+	if err != nil {
+		return err
+	}
+
+	result, err := Simulate(tokens)
+	if err != nil {
+		return err
+	}
+
+	if _, err := w.Write([]byte(result.String())); err != nil {
+		return err
+	}
+	return nil
 }
 
 // TODO: Implement

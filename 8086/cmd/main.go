@@ -31,24 +31,7 @@ func main() {
 	}
 
 	if *simulate {
-		data, err = inst.Dasm(data)
-		if err != nil {
-			l.Fatal(err.Error())
-		}
-
-		lines := inst.ToLines(data)
-
-		tokens, err := inst.Tokenize(lines)
-		if err != nil {
-			l.Fatal(err.Error())
-		}
-
-		result, err := inst.Simulate(tokens)
-		if err != nil {
-			l.Fatal(err.Error())
-		}
-
-		if _, err := os.Stdout.WriteString(result.String()); err != nil {
+		if err := inst.PrintSim(data, os.Stdout); err != nil {
 			l.Fatal(err.Error())
 		}
 	} else {
