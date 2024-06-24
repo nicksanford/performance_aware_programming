@@ -5,7 +5,8 @@ import (
 	"fmt"
 )
 
-func opTypeMovImmToRegOrMem(data []byte, i int) (string, int, error) {
+func opTypeMovImmToRegOrMem(data []byte, i int) (Inst, error) {
+	var iInc int
 	b1 := data[i]
 	b2 := data[i+1]
 
@@ -17,31 +18,37 @@ func opTypeMovImmToRegOrMem(data []byte, i int) (string, int, error) {
 
 	regS, err := regLookup(reg, w)
 	if err != nil {
-		return "", 0, err
+		return Inst{}, err
 	}
-	var source string
-	var dest string
+	var instSubType InstSubType
+	var source, dest string
+	var targetMem, sourceMem byte
+	var targetReg, sourceReg int
+	var targetRegSize, sourceRegSize RegSize
 	switch modType(b2) {
 	case ModTypeMemoryNoDisplacement:
 		// check for if R/M == 110 & if so do the 16 bit displacement
 		// DIRECT
 		if rm == 0b110 {
-			i += 4
 			panic("ModTypeMemoryNoDisplacement unimplemented")
 		} else {
+			instSubType = InstSubTypeRegToMem
 			eac, err := memModeLookup(rm)
 			if err != nil {
-				return "", 0, err
+				return Inst{}, err
 			}
 
 			dest, source = fmt.Sprintf("[%s]", eac), regS
-			i += 2
-
+			targetMem = rm
+			sourceReg = regToIndex[regToFullReg[regS]]
+			sourceRegSize = regToRegSize[regS]
+			iInc = 2
 		}
 	case ModTypeMemory8BitDisplacement:
-		eac, err := memMode8BitDisplacmentLookup(rm)
+		instSubType = InstSubTypeRegToMem
+		eac, err := memModeLookup(rm)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
 
 		displacement := int8(data[i+2])
@@ -50,12 +57,16 @@ func opTypeMovImmToRegOrMem(data []byte, i int) (string, int, error) {
 		} else {
 			dest, source = fmt.Sprintf("[%s + %d]", eac, displacement), regS
 		}
-		i += 3
+		targetMem = rm
+		sourceReg = regToIndex[regToFullReg[regS]]
+		sourceRegSize = regToRegSize[regS]
+		iInc = 3
 
 	case ModTypeMemory16BitDisplacement:
-		eac, err := memMode16BitDisplacmentLookup(rm)
+		instSubType = InstSubTypeRegToMem
+		eac, err := memModeLookup(rm)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
 		displacement := int16(data[i+2]) | int16(data[i+3])<<8
 		if displacement == 0 {
@@ -63,206 +74,315 @@ func opTypeMovImmToRegOrMem(data []byte, i int) (string, int, error) {
 		} else {
 			dest, source = fmt.Sprintf("[%s + %d]", eac, displacement), regS
 		}
-		i += 4
-	case ModTypeRegToReg:
+		targetMem = rm
+		sourceReg = regToIndex[regToFullReg[regS]]
+		sourceRegSize = regToRegSize[regS]
+		iInc = 4
+	case ModTypeReg:
+		instSubType = InstSubTypeRegToReg
 		rmS, err := regLookup(rm, w)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
 		dest, source = rmS, regS
-		i += 2
+		sourceReg = regToIndex[regToFullReg[regS]]
+		sourceRegSize = regToRegSize[regS]
+		targetReg = regToIndex[regToFullReg[rmS]]
+		targetRegSize = regToRegSize[rmS]
+		iInc = 2
 	default:
-		return "", 0, errors.New("mod field had unexpected value")
+		return Inst{}, errors.New("mod field had unexpected value")
 	}
+
 	if d {
+		if instSubType == InstSubTypeRegToMem {
+			instSubType = InstSubTypeMemToReg
+			sourceMem = targetMem
+			targetMem = 0
+
+			targetReg = sourceReg
+			sourceReg = 0
+
+			targetRegSize = sourceRegSize
+			sourceRegSize = RegSizeFull
+		}
 		dest, source = source, dest
 	}
-	return fmt.Sprintf("mov %s, %s\n", dest, source), i, nil
+	return Inst{
+		instType:      InstTypeMov,
+		instSubType:   instSubType,
+		s:             fmt.Sprintf("mov %s, %s", dest, source),
+		bytes:         data[i : i+iInc],
+		targetMem:     targetMem,
+		sourceMem:     sourceMem,
+		targetRegIdx:  targetReg,
+		sourceRegIdx:  sourceReg,
+		targetRegSize: targetRegSize,
+		sourceRegSize: sourceRegSize,
+	}, nil
 }
 
-func opTypeImmToRegOrMem(data []byte, i int) (string, int, error) {
+func opTypeImmToRegOrMem(data []byte, i int) (Inst, error) {
 	b1 := data[i]
 	b2 := data[i+1]
 
-	var inst string
+	var instType InstType
 	switch toAddSubCmp(b2 << 2 >> 5) {
 	case AddSubCmpAdd:
-		inst = "add"
+		instType = InstTypeAdd
 	case AddSubCmpSub:
-		inst = "sub"
+		instType = InstTypeSub
 	case AddSubCmpCmp:
-		inst = "cmp"
+		instType = InstTypeCmp
 	default:
 		panic("invalid AddSubCmp type")
 	}
 
 	w := byteIs(b1, wMask, wMask)
 
-	reg := b2 << 2 >> 5
-	// panic(fmt.Sprintf("%b", reg))
 	rm := b2 << 5 >> 5
 
-	regS, err := regLookup(reg, w)
-	if err != nil {
-		return "", 0, err
-	}
-	var source string
-	var dest string
-	var prefix string
 	switch modType(b2) {
 	case ModTypeMemoryNoDisplacement:
 		// check for if R/M == 110 & if so do the 16 bit displacement
 		// DIRECT
 		s := byteIs(b1, dMask, dMask)
 		if rm == 0b110 {
-			// panic(fmt.Sprintf("ModTypeMemoryNoDisplacement unimplemented %08b %08b %08b %08b", b1, b2, data[i+2], data[i+3]))
 			iInc := 2
-			dest = fmt.Sprintf("[%s]", fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8))
+			directMem := uint16(data[i+iInc]) | uint16(data[i+iInc+1])<<8
 			iInc += 2
-			var imm string
+			var imm uint16
+			wordOrByte := "byte"
 			if w {
-				prefix = "word"
+				wordOrByte = "word"
 				if s {
-					imm = fmt.Sprintf("%d", int8(data[i+iInc]))
-					iInc += 1
-				} else {
 					// instruction operates on word (2 byte) data
-					imm = fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8)
+					imm = uint16(data[i+iInc]) | uint16(data[i+iInc+1])<<8
 					iInc += 2
+				} else {
+					imm = uint16(data[i+iInc])
+					iInc += 1
 				}
 			} else {
-				prefix = "byte"
-				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+				imm = uint16(data[i+iInc])
 				iInc += 1
 			}
-			i += iInc
-			source = imm
+			return Inst{
+				instType:    instType,
+				instSubType: InstSubTypeImmToDirectMem,
+				s: fmt.Sprintf(
+					"%s %s %s, %s",
+					instType.String(),
+					wordOrByte,
+					fmt.Sprintf("[%s]", fmt.Sprintf("%d", directMem)),
+					fmt.Sprintf("%d", imm),
+				),
+				bytes:     data[i : i+iInc],
+				imm:       imm,
+				immWord:   wordOrByte == "word",
+				directMem: directMem,
+			}, nil
 		} else {
 			eac, err := memModeLookup(rm)
 			if err != nil {
-				return "", 0, err
+				return Inst{}, err
 			}
-			// panic(fmt.Sprintf("%s memmodenodisplacement %08b %08b w: %t, reg: %s, eac: %s", inst, b1, b2, w, regS, eac))
-			var imm string
+			// var imm string
+			// iInc := 2
+			// if s {
+			// 	prefix = "byte"
+			// 	// sign extend 8 bit immediate data to 16 bits
+			// 	// instruction operates on word (2 byte) data
+			// 	imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+			// 	iInc += 1
+			// } else {
+			// 	if w {
+			// 		prefix = "word"
+			// 		// instruction operates on word (2 byte) data
+			// 		imm = fmt.Sprintf("%d", uint16(data[i+iInc])|uint16(data[i+iInc+1])<<8)
+			// 		iInc += 2
+			// 	} else {
+			// 		prefix = "byte"
+			// 		imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+			// 		iInc += 1
+			// 	}
+			// }
+			var imm uint16
+			wordOrByte := "byte"
 			iInc := 2
-			if s {
-				prefix = "byte"
-				// sign extend 8 bit immediate data to 16 bits
-				// instruction operates on word (2 byte) data
-				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
-				iInc += 1
-			} else {
-				if w {
-					prefix = "word"
+			if w {
+				wordOrByte = "word"
+				if s {
 					// instruction operates on word (2 byte) data
-					imm = fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8)
+					imm = uint16(data[i+iInc]) | uint16(data[i+iInc+1])<<8
 					iInc += 2
 				} else {
-					prefix = "byte"
-					imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+					imm = uint16(data[i+iInc])
 					iInc += 1
 				}
+			} else {
+				imm = uint16(data[i+iInc])
+				iInc += 1
 			}
 
-			source = imm
-			dest = fmt.Sprintf("[%s]", eac)
-			i += iInc
+			return Inst{
+				instType:    instType,
+				instSubType: InstSubTypeImmToMem,
+				s: fmt.Sprintf(
+					"%s %s %s, %s",
+					instType.String(),
+					wordOrByte,
+					fmt.Sprintf("[%s]", eac),
+					fmt.Sprintf("%d", imm),
+				),
+				bytes:     data[i : i+iInc],
+				targetMem: rm,
+				imm:       imm,
+				immWord:   wordOrByte == "word",
+			}, nil
 		}
 	case ModTypeMemory8BitDisplacement:
-		eac, err := memMode8BitDisplacmentLookup(rm)
+		s := byteIs(b1, dMask, dMask)
+		eac, err := memModeLookup(rm)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
 
-		displacement := int8(data[i+2])
-		if displacement == 0 {
-			dest, source = fmt.Sprintf("[%s]", eac), regS
+		displacement := uint16(data[i+2])
+		var imm uint16
+		wordOrByte := "byte"
+		iInc := 3
+		if w {
+			wordOrByte = "word"
+			if s {
+				// instruction operates on word (2 byte) data
+				imm = uint16(data[i+iInc]) | uint16(data[i+iInc+1])<<8
+				iInc += 2
+			} else {
+				imm = uint16(data[i+iInc])
+				iInc += 1
+			}
 		} else {
-			dest, source = fmt.Sprintf("[%s + %d]", eac, displacement), regS
+			imm = uint16(data[i+iInc])
+			iInc += 1
 		}
-		i += 3
+		return Inst{
+			instType:    instType,
+			instSubType: InstSubTypeImmToMem,
+			s: fmt.Sprintf(
+				"%s %s %s, %s",
+				instType.String(),
+				wordOrByte,
+				fmt.Sprintf("[%s + %d]", eac, displacement),
+				fmt.Sprintf("%d", imm),
+			),
+			bytes:        data[i : i+iInc],
+			targetMem:    rm,
+			imm:          imm,
+			immWord:      wordOrByte == "word",
+			displacement: displacement,
+		}, nil
 
 	case ModTypeMemory16BitDisplacement:
 		s := byteIs(b1, dMask, dMask)
-		eac, err := memMode16BitDisplacmentLookup(rm)
+		eac, err := memModeLookup(rm)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
 
-		displacement := int16(data[i+2]) | int16(data[i+3])<<8
-		if displacement == 0 {
-			dest = fmt.Sprintf("[%s]", eac)
-		} else {
-			dest = fmt.Sprintf("[%s + %d]", eac, displacement)
-		}
+		displacement := uint16(data[i+2]) | uint16(data[i+3])<<8
 
-		var imm string
+		var imm uint16
+		wordOrByte := "byte"
 		iInc := 4
 		if w {
-			prefix = "word"
+			wordOrByte = "word"
 			if s {
-				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
-				iInc += 1
-			} else {
 				// instruction operates on word (2 byte) data
-				imm = fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8)
+				imm = uint16(data[i+iInc]) | uint16(data[i+iInc+1])<<8
 				iInc += 2
+			} else {
+				imm = uint16(data[i+iInc])
+				iInc += 1
 			}
 		} else {
-			prefix = "byte"
-			imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+			imm = uint16(data[i+iInc])
 			iInc += 1
 		}
-		// }
-		source = imm
-
-		i += iInc
-	case ModTypeRegToReg:
+		return Inst{
+			instType:    instType,
+			instSubType: InstSubTypeImmToMem,
+			s: fmt.Sprintf(
+				"%s %s %s, %s",
+				instType.String(),
+				wordOrByte,
+				fmt.Sprintf("[%s + %d]", eac, displacement),
+				fmt.Sprintf("%d", imm),
+			),
+			bytes:        data[i : i+iInc],
+			targetMem:    rm,
+			imm:          imm,
+			immWord:      wordOrByte == "word",
+			displacement: displacement,
+		}, nil
+	case ModTypeReg:
 		// TODO: Write mote tests for this case
 		s := byteIs(b1, dMask, dMask)
 		rmS, err := regLookup(rm, w)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
-		dest = rmS
-		var imm string
+		var imm uint16
+		wordOrByte := "byte"
 		iInc := 2
-		if s {
-			imm = fmt.Sprintf("%d", int8(data[i+iInc]))
-			iInc += 1
-		} else {
-			if w {
-				imm = fmt.Sprintf("%d", int16(data[i+iInc])|int16(data[i+iInc+1])<<8)
+		if w {
+			wordOrByte = "word"
+			if s {
+				// instruction operates on word (2 byte) data
+				imm = uint16(data[i+iInc]) | uint16(data[i+iInc+1])<<8
 				iInc += 2
 			} else {
-				imm = fmt.Sprintf("%d", int8(data[i+iInc]))
+				imm = uint16(data[i+iInc])
 				iInc += 1
 			}
+		} else {
+			imm = uint16(data[i+iInc])
+			iInc += 1
 		}
+		return Inst{
+			instType:    instType,
+			instSubType: InstSubTypeImmToReg,
+			s: fmt.Sprintf(
+				"%s %s %s, %s",
+				instType.String(),
+				wordOrByte,
+				rmS,
+				fmt.Sprintf("%d", imm),
+			),
+			bytes:         data[i : i+iInc],
+			targetRegIdx:  regToIndex[regToFullReg[rmS]],
+			targetRegSize: regToRegSize[rmS],
+			imm:           imm,
+			immWord:       wordOrByte == "word",
+		}, nil
 
-		i += iInc
-		source = imm
 	default:
-		return "", 0, errors.New("mod field had unexpected value")
+		return Inst{}, errors.New("mod field had unexpected value")
 	}
-	if prefix != "" {
-		return fmt.Sprintf("%s %s %s, %s\n", inst, prefix, dest, source), i, nil
-	}
-	return fmt.Sprintf("%s %s, %s\n", inst, dest, source), i, nil
 }
 
-func f(data []byte, i int) (string, int, error) {
+func opRegMemWithReg(data []byte, i int) (Inst, error) {
 	b1 := data[i]
 	b2 := data[i+1]
 	w := b1&0b00000001 == 0b00000001
-	var inst string
+	var instType InstType
 	switch toAddSubCmp(b1 << 2 >> 5) {
 	case AddSubCmpAdd:
-		inst = "add"
+		instType = InstTypeAdd
 	case AddSubCmpSub:
-		inst = "sub"
+		instType = InstTypeSub
 	case AddSubCmpCmp:
-		inst = "cmp"
+		instType = InstTypeCmp
 	default:
 		panic("invalid AddSubCmp type")
 	}
@@ -273,72 +393,109 @@ func f(data []byte, i int) (string, int, error) {
 
 	regS, err := regLookup(reg, w)
 	if err != nil {
-		return "", 0, err
+		return Inst{}, err
 	}
-	var source string
-	var dest string
+	sourceRegIdx := regToIndex[regToFullReg[regS]]
+	sourceRegSize := regToRegSize[regS]
+	iInc := 2
+	var instSubType InstSubType
+	var displacement uint16
+	var targetMem, sourceMem byte
+	var targetRegSize RegSize
+	var targetRegIdx int
+	var source, dest string
 	switch modType(b2) {
 	case ModTypeMemoryNoDisplacement:
 		// check for if R/M == 110 & if so do the 16 bit displacement
 		// DIRECT
 		if rm == 0b110 {
-			i += 4
 			panic("ModTypeMemoryNoDisplacement unimplemented")
 		}
+		instSubType = InstSubTypeRegToMem
 		eac, err := memModeLookup(rm)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
+		targetMem = rm
 
 		dest, source = fmt.Sprintf("[%s]", eac), regS
-		i += 2
+
 	case ModTypeMemory8BitDisplacement:
-		eac, err := memMode8BitDisplacmentLookup(rm)
+		instSubType = InstSubTypeRegToMem
+		eac, err := memModeLookup(rm)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
 
-		displacement := int8(data[i+2])
-		if displacement == 0 {
-			dest, source = fmt.Sprintf("[%s]", eac), regS
-		} else {
-			dest, source = fmt.Sprintf("[%s + %d]", eac, displacement), regS
-		}
-		i += 3
+		targetMem = rm
+		displacement = uint16(data[i+iInc])
+		dest, source = fmt.Sprint("[%s %d]", eac, displacement), regS
+		iInc += 1
 
 	case ModTypeMemory16BitDisplacement:
-		eac, err := memMode16BitDisplacmentLookup(rm)
+		instSubType = InstSubTypeRegToMem
+		eac, err := memModeLookup(rm)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
-		displacement := int16(data[i+2]) | int16(data[i+3])<<8
-		if displacement == 0 {
-			dest, source = fmt.Sprintf("[%s]", eac), regS
-		} else {
-			dest, source = fmt.Sprintf("[%s + %d]", eac, displacement), regS
-		}
-		i += 4
-	case ModTypeRegToReg:
+		targetMem = rm
+		displacement = uint16(data[i+iInc]) | uint16(data[i+iInc+1])<<8
+		dest, source = fmt.Sprint("[%s %d]", eac, displacement), regS
+		iInc += 2
+	case ModTypeReg:
+		instSubType = InstSubTypeRegToReg
 		rmS, err := regLookup(rm, w)
 		if err != nil {
-			return "", 0, err
+			return Inst{}, err
 		}
+
+		targetRegIdx = regToIndex[regToFullReg[rmS]]
+		targetRegSize = regToRegSize[rmS]
 		dest, source = rmS, regS
-		i += 2
 	default:
-		return "", 0, errors.New("mod field had unexpected value")
+		return Inst{}, errors.New("mod field had unexpected value")
 	}
+
+	if d && instSubType == InstSubTypeRegToReg {
+		sourceRegIdx, sourceRegSize = targetRegIdx, targetRegSize
+	}
+
+	if d && instSubType == InstSubTypeRegToMem {
+		instSubType = InstSubTypeMemToReg
+		sourceMem = targetMem
+		targetMem = 0
+
+		targetRegIdx = sourceRegIdx
+		targetRegSize = sourceRegSize
+		sourceRegIdx, sourceRegSize = 0, RegSizeFull
+	}
+
 	if d {
 		dest, source = source, dest
 	}
-	return fmt.Sprintf("%s %s, %s\n", inst, dest, source), i, nil
+	return Inst{
+		instType:    instType,
+		instSubType: instSubType,
+		s: fmt.Sprintf("%s %s, %s",
+			instType.String(),
+			dest,
+			source),
+		bytes:         data[i : i+iInc],
+		displacement:  displacement,
+		targetMem:     targetMem,
+		sourceMem:     sourceMem,
+		targetRegIdx:  targetRegIdx,
+		targetRegSize: targetRegSize,
+		sourceRegIdx:  sourceRegIdx,
+		sourceRegSize: sourceRegSize,
+	}, nil
 }
 
-func Dasm(data []byte) ([]byte, error) {
+func Dasm(data []byte) (Disassembly, error) {
 	if len(data) == 0 {
 		return nil, errors.New("data is empty")
 	}
-	res := "bits 16\n\n"
+	res := []Inst{}
 	var movT OpType
 	for i := 0; i < len(data); {
 		movT = opType(data[i])
@@ -358,42 +515,54 @@ func Dasm(data []byte) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			var iInc int
-			var imm string
+			var imm uint16
+			var immWord bool
+			iInc := 1
 			if w {
-				imm = fmt.Sprintf("%d", int16(data[i+1])|int16(data[i+2])<<8)
-				iInc = 2
+				immWord = true
+				imm = uint16(data[i+iInc]) | uint16(data[i+iInc+1])<<8
+				iInc += 2
 			} else {
-				imm = fmt.Sprintf("%d", int8(data[i+1]))
-				iInc = 1
+				imm = uint16(data[i+iInc])
+				iInc += 1
 			}
-			res += fmt.Sprintf("mov %s, %s\n", regS, imm)
-			i += iInc + 1
+			res = append(res, Inst{
+				instType:     InstTypeMov,
+				instSubType:  InstSubTypeImmToReg,
+				s:            fmt.Sprintf("mov %s, %d", regS, imm),
+				bytes:        data[i : i+iInc],
+				targetRegIdx: regToIndex[regS],
+				imm:          imm,
+				immWord:      immWord,
+			})
+			i += iInc
 		case OpTypeMovImmToRegOrMem:
 			panic("OpTypeMovImmToRegOrMem unimplemented")
 		case OpTypeMovRegMemToFromReg:
-			r, tmpI, err := opTypeMovImmToRegOrMem(data, i)
+			inst, err := opTypeMovImmToRegOrMem(data, i)
 			if err != nil {
 				return nil, err
 			}
-			i = tmpI
-			res += r
+			res = append(res, inst)
+			i = len(inst.bytes)
 
 		case OpTypeImmToRegOrMem:
-			r, tmpI, err := opTypeImmToRegOrMem(data, i)
+			inst, err := opTypeImmToRegOrMem(data, i)
 			if err != nil {
 				return nil, err
 			}
-			i = tmpI
-			res += r
+			res = append(res, inst)
+			i = len(inst.bytes)
 
-		case OpTypeAddRegMemWithReg:
-			r, tmpI, err := f(data, i)
+		case OpTypeAddRegMemWithReg,
+			OpTypeSubRegMemWithReg,
+			OpTypeCmpRegMemWithReg:
+			inst, err := opRegMemWithReg(data, i)
 			if err != nil {
 				return nil, err
 			}
-			i = tmpI
-			res += r
+			res = append(res, inst)
+			i = len(inst.bytes)
 		case OpTypeAddImmToAcc:
 			w := data[i]&0b00000001 == 0b00000001
 			imm := fmt.Sprintf("%d", int8(data[i+1]))
@@ -406,13 +575,6 @@ func Dasm(data []byte) ([]byte, error) {
 			}
 			res += fmt.Sprintf("add %s, %s\n", target, imm)
 			i += iInc
-		case OpTypeSubRegMemWithReg:
-			r, tmpI, err := f(data, i)
-			if err != nil {
-				return nil, err
-			}
-			i = tmpI
-			res += r
 		case OpTypeSubImmToAcc:
 			w := data[i]&0b00000001 == 0b00000001
 			imm := fmt.Sprintf("%d", int8(data[i+1]))
@@ -425,13 +587,6 @@ func Dasm(data []byte) ([]byte, error) {
 			}
 			res += fmt.Sprintf("sub %s, %s\n", target, imm)
 			i += iInc
-		case OpTypeCmpRegMemWithReg:
-			r, tmpI, err := f(data, i)
-			if err != nil {
-				return nil, err
-			}
-			i = tmpI
-			res += r
 		case OpTypeCmpImmToAcc:
 			w := data[i]&0b00000001 == 0b00000001
 			imm := fmt.Sprintf("%d", int8(data[i+1]))

@@ -13,6 +13,44 @@ func ToLines(data []byte) []string {
 	return strings.Split(strings.TrimSpace(body), "\n")
 }
 
+var regToFullReg = map[string]string{
+	"ax": "ax",
+	"al": "ax",
+	"ah": "ax",
+	"bx": "bx",
+	"bl": "bx",
+	"bh": "bx",
+	"cx": "cx",
+	"cl": "cx",
+	"ch": "cx",
+	"dx": "dx",
+	"dl": "dx",
+	"dh": "dx",
+	"sp": "sp",
+	"bp": "bp",
+	"si": "si",
+	"di": "di",
+}
+
+var regToRegSize = map[string]RegSize{
+	"ax": RegSizeFull,
+	"al": RegSizeLow,
+	"ah": RegSizeHigh,
+	"bx": RegSizeFull,
+	"bl": RegSizeLow,
+	"bh": RegSizeHigh,
+	"cx": RegSizeFull,
+	"cl": RegSizeLow,
+	"ch": RegSizeHigh,
+	"dx": RegSizeFull,
+	"dl": RegSizeLow,
+	"dh": RegSizeHigh,
+	"sp": RegSizeFull,
+	"bp": RegSizeFull,
+	"si": RegSizeFull,
+	"di": RegSizeFull,
+}
+
 var regToIndex = map[string]int{
 	"ax": 0,
 	"bx": 1,
@@ -35,10 +73,6 @@ var indexToReg = [8]string{
 	"di",
 }
 
-type Tokens struct {
-	instructions []Inst
-}
-
 type CPU struct {
 	regs  [8]uint16
 	signF bool
@@ -55,47 +89,107 @@ type InstType int
 
 const (
 	InstTypeUnknown InstType = iota
-	InstTypeMovImmediate
-	InstTypeMovRegToReg
-	InstTypeAddImmediate
-	InstTypeAddRegToReg
-	InstTypeSubImmediate
-	InstTypeSubRegToReg
-	InstTypeCmpImmediate
-	InstTypeCmpRegToReg
+	InstTypeMov
+	InstTypeAdd
+	InstTypeSub
+	InstTypeCmp
+)
+
+type InstSubType int
+
+const (
+	InstSubTypeUnknown InstSubType = iota
+	InstSubTypeImmToReg
+	InstSubTypeRegToReg
+	InstSubTypeRegToMem
+	InstSubTypeMemToReg
+	InstSubTypeImmToDirectMem
+	InstSubTypeImmToMem
+)
+
+type RegSize int
+
+const (
+	RegSizeFull RegSize = iota
+	RegSizeLow
+	RegSizeHigh
 )
 
 type Inst struct {
-	t               InstType
-	s               string
-	targetRegister  int
-	sourceRegister  int
-	sourceImmediate uint16
+	instType    InstType
+	instSubType InstSubType
+	s           string
+	bytes       []byte
+
+	targetRegSize RegSize
+	targetRegIdx  int
+
+	sourceRegIdx  int
+	sourceRegSize RegSize
+
+	targetMem byte
+
+	sourceMem    byte
+	displacement uint16
+
+	imm     uint16
+	immWord bool
+
+	directMem uint16
+}
+
+type Disassembly []Inst
+
+func (d Disassembly) String() string {
+	ret := "bits 16\n\n"
+	for _, i := range d {
+		ret += i.s
+	}
+	return ret
 }
 
 func (it InstType) String() string {
 	switch it {
-	case InstTypeMovImmediate:
-		return "InstTypeMov"
+	case InstTypeMov:
+		return "mov"
+	case InstTypeAdd:
+		return "add"
+	case InstTypeSub:
+		return "sub"
+	case InstTypeCmp:
+		return "cmp"
 	default:
 		return fmt.Sprintf("InstTypeUnknown(%d)", it)
 	}
 }
 
+func (ist InstSubType) String() string {
+	switch ist {
+	case InstSubTypeImmToReg:
+		return "InstSubTypeImmediate"
+	case InstSubTypeRegToReg:
+		return "InstSubTypeRegToReg"
+	case InstSubTypeRegToMem:
+		return "InstSubTypeRegToMem"
+	case InstSubTypeMemToReg:
+		return "InstSubTypeMemToReg"
+	default:
+		return fmt.Sprintf("InstTypeUnknown(%d)", ist)
+	}
+}
+
 func PrintSim(data []byte, w io.Writer) error {
-	data, err := Dasm(data)
+	is, err := Dasm(data)
 	if err != nil {
 		return err
 	}
 
-	lines := ToLines(data)
+	// tokens, err := Tokenize(lines)
+	// if err != nil {
+	// 	return err
+	// }
 
-	tokens, err := Tokenize(lines)
-	if err != nil {
-		return err
-	}
-
-	result, err := Simulate(tokens)
+	result, err := Simulate(is)
 	if err != nil {
 		return err
 	}
@@ -106,8 +200,7 @@ func PrintSim(data []byte, w io.Writer) error {
 	return nil
 }
 
-// TODO: Implement
-func Tokenize(lines []string) (Tokens, error) {
+func Tokenize(lines []string) ([]Inst, error) {
 	insts := []Inst{}
 	for _, l := range lines {
 		spaceSep := strings.Split(l, " ")
@@ -122,52 +215,52 @@ func Tokenize(lines []string) (Tokens, error) {
 			switch {
 			case out[0] == "mov" && targetRegOk && err == nil:
 				insts = append(insts, Inst{
-					t:               InstTypeMovImmediate,
-					s:               l,
-					targetRegister:  targetRegister,
-					sourceImmediate: uint16(i)})
+					instType:     InstTypeMovImmediate,
+					s:            l,
+					targetRegIdx: targetRegister,
+					immWord:      uint16(i)})
 			case out[0] == "mov" && targetRegOk && sourceRegOk:
 				insts = append(insts, Inst{
-					t:              InstTypeMovRegToReg,
-					s:              l,
-					targetRegister: targetRegister,
-					sourceRegister: sourceRegister})
+					instType:     InstTypeMovRegToReg,
+					s:            l,
+					targetRegIdx: targetRegister,
+					sourceRegIdx: sourceRegister})
 			case out[0] == "add" && targetRegOk && err == nil:
 				insts = append(insts, Inst{
-					t:               InstTypeAddImmediate,
-					s:               l,
-					targetRegister:  targetRegister,
-					sourceImmediate: uint16(i)})
+					instType:     InstTypeAddImmediate,
+					s:            l,
+					targetRegIdx: targetRegister,
+					immWord:      uint16(i)})
 			case out[0] == "add" && targetRegOk && sourceRegOk:
 				insts = append(insts, Inst{
-					t:              InstTypeAddRegToReg,
-					s:              l,
-					targetRegister: targetRegister,
-					sourceRegister: sourceRegister})
+					instType:     InstTypeAddRegToReg,
+					s:            l,
+					targetRegIdx: targetRegister,
+					sourceRegIdx: sourceRegister})
 			case out[0] == "sub" && targetRegOk && err == nil:
 				insts = append(insts, Inst{
-					t:               InstTypeSubImmediate,
-					s:               l,
-					targetRegister:  targetRegister,
-					sourceImmediate: uint16(i)})
+					instType:     InstTypeSubImmediate,
+					s:            l,
+					targetRegIdx: targetRegister,
+					immWord:      uint16(i)})
 			case out[0] == "sub" && targetRegOk && sourceRegOk:
 				insts = append(insts, Inst{
-					t:              InstTypeSubRegToReg,
-					s:              l,
-					targetRegister: targetRegister,
-					sourceRegister: sourceRegister})
+					instType:     InstTypeSubRegToReg,
+					s:            l,
+					targetRegIdx: targetRegister,
+					sourceRegIdx: sourceRegister})
 			case out[0] == "cmp" && targetRegOk && err == nil:
 				insts = append(insts, Inst{
-					t:               InstTypeCmpImmediate,
-					s:               l,
-					targetRegister:  targetRegister,
-					sourceImmediate: uint16(i)})
+					instType:     InstTypeCmpImmediate,
+					s:            l,
+					targetRegIdx: targetRegister,
+					immWord:      uint16(i)})
 			case out[0] == "cmp" && targetRegOk && sourceRegOk:
 				insts = append(insts, Inst{
-					t:              InstTypeCmpRegToReg,
-					s:              l,
-					targetRegister: targetRegister,
-					sourceRegister: sourceRegister})
+					instType:     InstTypeCmpRegToReg,
+					s:            l,
+					targetRegIdx: targetRegister,
+					sourceRegIdx: sourceRegister})
 			default:
 				panic("at the disco")
 			}
@@ -175,60 +268,59 @@ func Tokenize(lines []string) (Tokens, error) {
 			panic("at the club")
 		}
 	}
-	return Tokens{instructions: insts}, nil
+	return insts, nil
 }
 
-// TODO: Implement
-func Simulate(ts Tokens) (SimulationResult, error) {
+func Simulate(is []Inst) (SimulationResult, error) {
 	var cpu CPU
 	changes := []string{}
-	for _, t := range ts.instructions {
-		switch t.t {
+	for _, t := range is {
+		switch t.instType {
 		case InstTypeMovImmediate:
-			before := cpu.regs[t.targetRegister]
-			cpu.regs[t.targetRegister] = t.sourceImmediate
-			changes = append(changes, fmt.Sprintf("%s:%#x->%#x", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister]))
+			before := cpu.regs[t.targetRegIdx]
+			cpu.regs[t.targetRegIdx] = t.immWord
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x", indexToReg[t.targetRegIdx], before, cpu.regs[t.targetRegIdx]))
 		case InstTypeMovRegToReg:
-			before := cpu.regs[t.targetRegister]
-			cpu.regs[t.targetRegister] = cpu.regs[t.sourceRegister]
-			changes = append(changes, fmt.Sprintf("%s:%#x->%#x", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister]))
+			before := cpu.regs[t.targetRegIdx]
+			cpu.regs[t.targetRegIdx] = cpu.regs[t.sourceRegIdx]
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x", indexToReg[t.targetRegIdx], before, cpu.regs[t.targetRegIdx]))
 		case InstTypeAddImmediate:
-			before := cpu.regs[t.targetRegister]
+			before := cpu.regs[t.targetRegIdx]
 			cpuFlagsBefore := cpu.FlagsString()
-			cpu.regs[t.targetRegister] += t.sourceImmediate
-			cpu.zeroF = cpu.regs[t.targetRegister] == 0
-			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
-			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister], cpuFlagsBefore, cpu.FlagsString()))
+			cpu.regs[t.targetRegIdx] += t.immWord
+			cpu.zeroF = cpu.regs[t.targetRegIdx] == 0
+			cpu.signF = (cpu.regs[t.targetRegIdx]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegIdx], before, cpu.regs[t.targetRegIdx], cpuFlagsBefore, cpu.FlagsString()))
 		case InstTypeAddRegToReg:
-			before := cpu.regs[t.targetRegister]
+			before := cpu.regs[t.targetRegIdx]
 			cpuFlagsBefore := cpu.FlagsString()
-			cpu.regs[t.targetRegister] += cpu.regs[t.sourceRegister]
-			cpu.zeroF = cpu.regs[t.targetRegister] == 0
-			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
-			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister], cpuFlagsBefore, cpu.FlagsString()))
+			cpu.regs[t.targetRegIdx] += cpu.regs[t.sourceRegIdx]
+			cpu.zeroF = cpu.regs[t.targetRegIdx] == 0
+			cpu.signF = (cpu.regs[t.targetRegIdx]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegIdx], before, cpu.regs[t.targetRegIdx], cpuFlagsBefore, cpu.FlagsString()))
 		case InstTypeSubImmediate:
-			before := cpu.regs[t.targetRegister]
+			before := cpu.regs[t.targetRegIdx]
 			cpuFlagsBefore := cpu.FlagsString()
-			cpu.regs[t.targetRegister] -= t.sourceImmediate
-			cpu.zeroF = cpu.regs[t.targetRegister] == 0
-			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
-			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister], cpuFlagsBefore, cpu.FlagsString()))
+			cpu.regs[t.targetRegIdx] -= t.immWord
+			cpu.zeroF = cpu.regs[t.targetRegIdx] == 0
+			cpu.signF = (cpu.regs[t.targetRegIdx]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegIdx], before, cpu.regs[t.targetRegIdx], cpuFlagsBefore, cpu.FlagsString()))
 		case InstTypeSubRegToReg:
-			before := cpu.regs[t.targetRegister]
+			before := cpu.regs[t.targetRegIdx]
 			cpuFlagsBefore := cpu.FlagsString()
-			cpu.regs[t.targetRegister] -= cpu.regs[t.sourceRegister]
-			cpu.zeroF = cpu.regs[t.targetRegister] == 0
-			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
-			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegister], before, cpu.regs[t.targetRegister], cpuFlagsBefore, cpu.FlagsString()))
+			cpu.regs[t.targetRegIdx] -= cpu.regs[t.sourceRegIdx]
+			cpu.zeroF = cpu.regs[t.targetRegIdx] == 0
+			cpu.signF = (cpu.regs[t.targetRegIdx]>>15)&0b1 == 0b1
+			changes = append(changes, fmt.Sprintf("%s:%#x->%#x flags:%s->%s", indexToReg[t.targetRegIdx], before, cpu.regs[t.targetRegIdx], cpuFlagsBefore, cpu.FlagsString()))
 		case InstTypeCmpImmediate:
 			cpuFlagsBefore := cpu.FlagsString()
-			cpu.regs[t.targetRegister] -= t.sourceImmediate
-			cpu.zeroF = cpu.regs[t.targetRegister] == 0
-			cpu.signF = (cpu.regs[t.targetRegister]>>15)&0b1 == 0b1
+			cpu.regs[t.targetRegIdx] -= t.immWord
+			cpu.zeroF = cpu.regs[t.targetRegIdx] == 0
+			cpu.signF = (cpu.regs[t.targetRegIdx]>>15)&0b1 == 0b1
 			changes = append(changes, fmt.Sprintf("flags:%s->%s", cpuFlagsBefore, cpu.FlagsString()))
 		case InstTypeCmpRegToReg:
 			cpuFlagsBefore := cpu.FlagsString()
-			res := cpu.regs[t.targetRegister] - cpu.regs[t.sourceRegister]
+			res := cpu.regs[t.targetRegIdx] - cpu.regs[t.sourceRegIdx]
 			cpu.zeroF = res == 0
 			cpu.signF = (res>>15)&0b1 == 0b1
 			changes = append(changes, fmt.Sprintf("flags:%s->%s", cpuFlagsBefore, cpu.FlagsString()))
@@ -237,7 +329,7 @@ func Simulate(ts Tokens) (SimulationResult, error) {
 		}
 	}
 	return SimulationResult{
-		instructions: ts.instructions,
+		instructions: is,
 		changes:      changes,
 		cpu:          cpu,
 	}, nil
